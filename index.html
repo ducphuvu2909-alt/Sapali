@@ -806,174 +806,137 @@ function renderFooterBox(){
 })();
 </script>
 
-
-<script id="routerOverrideV1">
-(function(){
-  if (window.__sapaliRouterOverride) return; 
-  window.__sapaliRouterOverride = true;
-  function bubble(who, html){
-    try{
-      var box = document.getElementById('aiMsgs'); if(!box) return;
-      var b = document.createElement('div'); b.className='bubble ' + (who==='user'?'user':'ai');
-      if(html && /[<>]/.test(html)) { b.innerHTML = html; } else { b.textContent = html; }
-      box.appendChild(b); box.scrollTop = box.scrollHeight;
-    }catch(e){}
-  }
-  async function callEngine(plan, q){
-    const online = !!(window.SAPALI_AI_CFG && SAPALI_AI_CFG.online);
-    if(plan.intent==='internal'){
-      if(typeof window.internalEngine === 'function') return await window.internalEngine(q);
-      return 'Em chưa tìm thấy nội bộ phù hợp.';
-    }
-    if(!online){
-      return 'Chế độ Offline đang bật — chỉ trả lời nội bộ. Bật "Online Free" để dùng bách khoa/kinh tế.';
-    }
-    if(plan.intent==='economy'){
-      if(plan.pair || /t[ỷy]\s*gi[aá]/i.test(q)) return await window.econEngine(q);
-      return await window.wbEngine(q);
-    }
-    if(plan.intent==='news'){
-      return await window.newsEngine(plan.topic||q);
-    }
-    if(plan.intent==='math'){
-      return await window.mathEngine(q);
-    }
-    return await window.wikiEngine(plan.topic||q);
-  }
-  window.sendAI = async function(){
-    try{
-      var inp = document.getElementById('aiInput');
-      var q = (inp && inp.value ? inp.value : '').trim();
-      if(!q) return;
-      bubble('user', q);
-      if(inp) inp.value='';
-      var plan = (typeof window.planQuery==='function') ? window.planQuery(q) 
-                : (typeof window.detectIntent==='function' ? window.detectIntent(q) : {type:'wiki', topic:q});
-      if(plan.type && !plan.intent) plan.intent = plan.type;
-      var answer = await callEngine(plan, q);
-      bubble('ai', answer);
-    }catch(err){
-      console.error(err);
-      bubble('ai', 'Có lỗi khi gọi nguồn miễn phí. Anh thử lại giúp em nhé.');
-    }
-  };
-})();
-</script>
-<script id="sapali-ai-core">(function(){window.SAPALI_AI_CFG=Object.assign({online:true,tone:'gpt',cacheHours:6},window.SAPALI_AI_CFG||{});function bubble(who,content,isHTML){try{var box=document.getElementById('aiMsgs');if(!box)return;var b=document.createElement('div');b.className='bubble '+(who==='user'?'user':'ai');if(isHTML)b.innerHTML=content;else b.textContent=content;box.appendChild(b);box.scrollTop=box.scrollHeight;}catch(e){}}function norm(s){return(s||'').toString().trim();}async function cachedFetch(url,ttlHours){const KEY='sapali_cache_v1';const now=Date.now();let store={};try{store=JSON.parse(localStorage.getItem(KEY)||'{}');}catch(e){}const hit=store[url];if(hit&&(now-hit.ts)<(ttlHours*3600*1000))return hit.data;const res=await fetch(url);let data;try{data=await res.json();}catch(e){data={raw:await res.text()};}store[url]={ts:now,data};localStorage.setItem(KEY,JSON.stringify(store));return data;}function planQuery(q){const orig=String(q||'');const s=orig.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');const cleaned=s.replace(/[!?]+/g,' ').replace(/\s+/g,' ').trim();let pair=null;const m1=cleaned.match(/\b([a-z]{3})\s*[/ -]?\s*([a-z]{3})\b/);if(m1)pair=(m1[1]+'/'+m1[2]).toUpperCase();const isEcon=/(ty gia|tygia|exchange|usd|vnd|eur|jpy|cpi|gdp|lam phat|lai suat|interest|inflation)/.test(cleaned);const isNews=/(tin|news|ban tin|thi truong|market)/.test(cleaned);const isInternal=/\b(ecn|wi|bom|dept|pu|po|model|ma|sku|tem|spec|linh kien|bo phan)\b/.test(cleaned)||/[A-Z0-9]{2,}[-_][A-Z0-9]{2,}/.test(orig);let intent='internal';if(isInternal)intent='internal';else if(isEcon)intent='economy';else if(isNews)intent='news';else if(/\d[\s\+\-\*\/\(\)\.]+\d/.test(orig))intent='math';else intent=(window.SAPALI_AI_CFG.online?'wiki':'internal');let topic=orig.trim();return{intent,pair,topic};}function compose(p,asHTML=false){const t=(window.SAPALI_AI_CFG.tone||'gpt');const{title,bullets=[],body='',link,note}=p||{};const intro=t==='gpt'?'Theo dữ liệu em tổng hợp:':t==='biz'?'Thông tin tổng hợp cho anh/chị:':'Kết quả phân tích:';let out=`**${title||'Kết quả'}**\n${intro}\n`;if(body)out+=`\n${body}\n`;if(bullets.length)out+='\n'+bullets.map(x=>`- ${x}`).join('\n')+'\n';if(note)out+=`\n> _${note}_\n`;if(link)out+=`\n[Tham khảo](${link})`;return asHTML?out.replace(/\n/g,'<br>'):out;}async function econEngine(q){const m=q.toUpperCase().match(/\b([A-Z]{3})[\/\s\-]*([A-Z]{3})\b/);const base=(m&&m[1])||'USD';const sym=(m&&m[2])||'VND';const url=`https://api.exchangerate.host/latest?base=${encodeURIComponent(base)}&symbols=${encodeURIComponent(sym)}`;const d=await cachedFetch(url,(window.SAPALI_AI_CFG.cacheHours||1));if(!d||!d.rates||!d.rates[sym])return'Chưa lấy được tỷ giá.';const rate=d.rates[sym];return compose({title:`Tỷ giá ${base}/${sym}`,bullets:[`Tỷ giá hiện tại: **${Number(rate).toLocaleString()}**`,'Nguồn: exchangerate.host']},true);}async function wbEngine(q){const map={gdp:'NY.GDP.MKTP.CD',inflation:'FP.CPI.TOTL.ZG',cpi:'FP.CPI.TOTL.ZG',interest:'FR.INR.LEND'};let ind='NY.GDP.MKTP.CD',country='VNM';if(/inflation|l[ạa]m ph[aá]t|cpi/i.test(q))ind=map.inflation;if(/interest|l[ãa]i su[aá]t/i.test(q))ind=map.interest;const c=(q.toLowerCase().match(/\b(vietnam|viet nam|japan|jpn|usa|us|china|cn|singapore|sg)\b/)||[])[1];if(c){country=/jap|jpn|japan/.test(c)?'JPN':/usa|us/.test(c)?'USA':/china|cn/.test(c)?'CHN':/singapore|sg/.test(c)?'SGP':'VNM';}const url=`https://api.worldbank.org/v2/country/${country}/indicator/${ind}?format=json&per_page=5`;const d=await cachedFetch(url,(window.SAPALI_AI_CFG.cacheHours||24));const arr=(d&&d[1])||[];const rows=arr.filter(x=>x.value!=null).slice(0,3).map(x=>`**${x.date}**: ${Number(x.value).toLocaleString()}`);return compose({title:`World Bank — ${ind} (${country})`,bullets:rows.length?rows:['Chưa có số liệu hợp lệ']},true);}async function wikiEngine(q){async function wikiFetch(lang,title){const U=`https://${lang}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`;return await cachedFetch(U,(window.SAPALI_AI_CFG.cacheHours||6));}const title=String(q).replace(/\b(là gì|la gi|wiki(pedia)?|định nghĩa|dinh nghia)\b/gi,'').trim();let d=await wikiFetch('vi',title);if(!d||(!d.extract&&!d.description))d=await wikiFetch('en',title);if(d&&(d.extract||d.description)){return compose({title:d.title||q,body:(d.description?`_${d.description}_\n\n`:'')+(d.extract||''),link:(d.content_urls&&d.content_urls.desktop)?d.content_urls.desktop.page:undefined},true);}return'Chưa tìm thấy mục từ phù hợp trên Wikipedia.';}async function newsEngine(q){const kw=encodeURIComponent(q.replace(/\b(tin|news|bản tin|thị trường)\b/gi,'').trim()||'kinh tế');const url=`https://r.jina.ai/http://news.google.com/rss/search?q=${kw}`;const raw=await cachedFetch(url,Math.min(1,(window.SAPALI_AI_CFG.cacheHours||1)));const xml=raw.raw||'';const items=[...xml.matchAll(/<item>([\s\S]*?)<\/item>/g)].slice(0,5).map(m=>{const t=(m[1].match(/<title><!\[CDATA\[(.*?)\]\]><\/title>/)||[])[1]||(m[1].match(/<title>(.*?)<\/title>/)||[])[1]||'';const l=(m[1].match(/<link>(.*?)<\/link>/)||[])[1]||'';return`• ${t}\n  ${l}`;});return compose({title:`Bản tin nhanh: ${decodeURIComponent(kw)}`,bullets:items.length?items:['Không đọc được RSS (CORS). Hãy thử lại.'],note:'Nguồn: Google News RSS'},true);}async function mathEngine(q){try{const expr=q.match(/[-+/*()0-9.\s]+/g)?.join('')||'';const val=Function('"use strict"; return ('+expr+')')();if(!isFinite(val))throw 0;return compose({title:'Tính toán',bullets:[`${expr} = **${val}**`]},true);}catch(e){return'Không tính được biểu thức.';}}async function internalEngine(q){const KB=JSON.parse(localStorage.getItem('sapali_ai_knowledge')||'[]');const hit=KB.find(x=>(x.q||'').toLowerCase().includes(q.toLowerCase()));if(hit)return compose({title:'Kiến thức nội bộ',bullets:[hit.a],note:'Nguồn: Sapali KB (localStorage)'},true);return'Em chưa tìm thấy nội dung nội bộ phù hợp. Anh có thể cung cấp mã/Dept/WI/ECN cụ thể hơn không?';}async function callEngine(plan,q){const online=!!(window.SAPALI_AI_CFG&&window.SAPALI_AI_CFG.online);if(plan.intent==='internal')return await internalEngine(q);if(!online)return'Chế độ Offline đang bật — chỉ trả lời nội bộ. Bật "Online Free" để dùng bách khoa/kinh tế.';if(plan.intent==='economy'){if(plan.pair||/t[ỷy]\s*gi[aá]/i.test(q))return await econEngine(q);return await wbEngine(q);}if(plan.intent==='news')return await newsEngine(plan.topic||q);if(plan.intent==='math')return await mathEngine(q);return await wikiEngine(plan.topic||q);}window.sendAI=async function(){try{var inp=document.getElementById('aiInput');var q=norm(inp&&inp.value);if(!q)return;bubble('user',q,false);if(inp)inp.value='';var plan=planQuery(q);var ans=await callEngine(plan,q);bubble('ai',ans,true);}catch(e){console.error(e);bubble('ai','Có lỗi khi gọi nguồn miễn phí. Anh thử lại giúp em nhé.',false);}};})();</script><script id="ai-final-override">
-(function(){
-  function bubble(who, content, isHTML){
-    try{var box=document.getElementById('aiMsgs'); if(!box) return;
-      var b=document.createElement('div'); b.className='bubble ' + (who==='user'?'user':'ai');
-      if(isHTML) b.innerHTML=content; else b.textContent=content;
-      box.appendChild(b); box.scrollTop=box.scrollHeight;}catch(e){}}
-  function compose(p,html){const {title,bullets=[],body='',link,note}=p||{};let out=`**${title||'Kết quả'}**\n`; if(body) out+=`\n${body}\n`; if(bullets.length) out+='\n'+bullets.map(x=>`- ${x}`).join('\n')+'\n'; if(note) out+=`\n> _${note}_\n`; if(link) out+=`\n[Tham khảo](${link})`; return html?out.replace(/\n/g,'<br>'):out;}
-  async function cachedFetch(url, ttlH){const KEY='sapali_cache_v1', now=Date.now(); let s={}; try{s=JSON.parse(localStorage.getItem(KEY)||'{}')}catch(e){} if(s[url]&&(now-s[url].ts)<(ttlH*3600*1000))return s[url].data; const r=await fetch(url); let d; try{d=await r.json()}catch(e){d={raw:await r.text()}}; s[url]={ts:now,data:d}; localStorage.setItem(KEY,JSON.stringify(s)); return d;}
-  function plan(q){const orig=String(q||''); const s=orig.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''); const isEcon=/(ty gia|tygia|exchange|usd|vnd|eur|jpy|cpi|gdp|lam phat|lai suat|interest|inflation)/.test(s); const isNews=/(tin|news|ban tin|thi truong|market)/.test(s); const isInt=/\b(ecn|wi|bom|dept|pu|po|model|ma|sku|tem|spec|linh kien|bo phan)\b/.test(s)||/[A-Z0-9]{2,}[-_][A-Z0-9]{2,}/.test(orig); if(isInt) return {intent:'internal'}; if(isEcon) return {intent:'economy'}; if(isNews) return {intent:'news'}; if(/\d[\s\+\-\*\/\(\)\.]+\d/.test(orig)) return {intent:'math'}; return {intent:'wiki'}; }
-  async function wiki(q){ async function w(lang){return await cachedFetch(`https://${lang}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(q)}`,6)} let d=await w('vi'); if(!d||(!d.extract&&!d.description)) d=await w('en'); if(d&&(d.extract||d.description)) return compose({title:d.title||q, body:(d.description?`_${d.description}_\\n\\n`:'')+(d.extract||''), link:(d.content_urls&&d.content_urls.desktop)?d.content_urls.desktop.page:undefined},true); return 'Chưa tìm thấy mục từ phù hợp trên Wikipedia.'; }
-  async function fx(q){ const m=q.toUpperCase().match(/\b([A-Z]{3})[\/\s\-]*([A-Z]{3})\b/); const base=(m&&m[1])||'USD', sym=(m&&m[2])||'VND'; const d=await cachedFetch(`https://api.exchangerate.host/latest?base=${base}&symbols=${sym}`,1); if(!d||!d.rates||!d.rates[sym]) return 'Chưa lấy được tỷ giá.'; return compose({title:`Tỷ giá ${base}/${sym}`, bullets:[`Hiện tại: **${Number(d.rates[sym]).toLocaleString()}**`,`Nguồn: exchangerate.host`]},true); }
-  async function wb(q){ const map={gdp:'NY.GDP.MKTP.CD',inflation:'FP.CPI.TOTL.ZG',cpi:'FP.CPI.TOTL.ZG',interest:'FR.INR.LEND'}; let ind='NY.GDP.MKTP.CD', cc='VNM'; if(/inflation|l[ạa]m ph[aá]t|cpi/i.test(q)) ind=map.inflation; if(/interest|l[ãa]i su[aá]t/i.test(q)) ind=map.interest; const c=(q.toLowerCase().match(/\b(vietnam|viet nam|japan|jpn|usa|us|china|cn|singapore|sg)\b/)||[])[1]; if(c){ cc=/jap|jpn|japan/.test(c)?'JPN':/usa|us/.test(c)?'USA':/china|cn/.test(c)?'CHN':/singapore|sg/.test(c)?'SGP':'VNM'; } const d=await cachedFetch(`https://api.worldbank.org/v2/country/${cc}/indicator/${ind}?format=json&per_page=5`,24); const arr=(d&&d[1])||[]; const rows=arr.filter(x=>x.value!=null).slice(0,3).map(x=>`**${x.date}**: ${Number(x.value).toLocaleString()}`); return compose({title:`World Bank — ${ind} (${cc})`, bullets: rows.length?rows:['Chưa có số liệu hợp lệ']},true); }
-  async function news(q){ const kw=encodeURIComponent(q.replace(/\b(tin|news|bản tin|thị trường)\b/gi,'').trim()||'kinh tế'); const raw=await cachedFetch(`https://r.jina.ai/http://news.google.com/rss/search?q=${kw}`,1); const xml=raw.raw||''; const items=[...xml.matchAll(/<item>([\s\S]*?)<\/item>/g)].slice(0,5).map(m=>{ const t=(m[1].match(/<title><!\[CDATA\[(.*?)\]\]><\/title>/)||[])[1]||(m[1].match(/<title>(.*?)<\/title>/)||[])[1]||''; const l=(m[1].match(/<link>(.*?)<\/link>/)||[])[1]||''; return `• ${t}\n  ${l}`; }); return compose({title:`Bản tin nhanh`, bullets:items.length?items:['Không đọc được RSS.'], note:'Nguồn: Google News RSS'},true); }
-  async function math(q){ try{const expr=q.match(/[-+/*()0-9.\s]+/g)?.join('')||''; const v=Function('"use strict";return('+expr+')')(); if(!isFinite(v)) throw 0; return compose({title:'Tính toán',bullets:[`${expr} = **${v}**`]},true);}catch(e){return'Không tính được biểu thức.';} }
-  async function internal(q){ const KB=JSON.parse(localStorage.getItem('sapali_ai_knowledge')||'[]'); const hit=KB.find(x=>(x.q||'').toLowerCase().includes(q.toLowerCase())); return hit? compose({title:'Kiến thức nội bộ',bullets:[hit.a],note:'Nguồn: Sapali KB (localStorage)'},true) : 'Em chưa tìm thấy nội bộ phù hợp.'; }
-  function route(plan,q){ if(plan.intent==='internal') return internal(q); if(plan.intent==='economy') return /\b[A-Z]{3}[\/\s\-]*[A-Z]{3}\b/i.test(q)||/t[ỷy]\s*gi[aá]/i.test(q)?fx(q):wb(q); if(plan.intent==='news') return news(q); if(plan.intent==='math') return math(q); return wiki(q); }
-  window.addEventListener('load', function(){ window.sendAI = async function(){ const input=document.getElementById('aiInput'); const q=(input&&input.value||'').trim(); if(!q) return; bubble('user', q, false); input.value=''; const ans = await route(plan(q), q); bubble('ai', ans, true); }; });
-})();
-</script>
 <script id="ai-final-override">
-/* === Sapali AI: client-only override for GitHub Pages (no backend) === */
 (function(){
-  function bubble(who, content, isHTML){
-    try{
-      var box=document.getElementById('aiMsgs'); if(!box) return;
-      var b=document.createElement('div'); b.className='bubble ' + (who==='user'?'user':'ai');
-      if(isHTML) b.innerHTML=content; else b.textContent=content;
-      box.appendChild(b); box.scrollTop=box.scrollHeight;
-    }catch(e){}
+  /* === Tiny Router + GPT-like Composer (free, client-only) === */
+
+  // ---- UI helper
+  function bubble(who, html){const box=document.getElementById('aiMsgs'); if(!box) return;
+    const b=document.createElement('div'); b.className='bubble ' + (who==='user'?'user':'ai');
+    b.innerHTML=html; box.appendChild(b); box.scrollTop=box.scrollHeight;}
+
+  // ---- Utils
+  function vn(s){return (s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'');}
+  async function cached(url,ttlH=6){const KEY='sapali_cache_v2',now=Date.now();let mem={};
+    try{mem=JSON.parse(localStorage.getItem(KEY)||'{}')}catch(e){}
+    if(mem[url]&&now-mem[url].ts<ttlH*3600*1000) return mem[url].data;
+    const r=await fetch(url); let d; try{d=await r.json()}catch(e){d={raw:await r.text()}}
+    mem[url]={ts:now,data:d}; localStorage.setItem(KEY,JSON.stringify(mem)); return d;}
+
+  // ---- GPT-like composer (VI)
+  function compose({title,summary,bullets=[],note,link}) {
+    let out = `<b>${title||'Kết quả'}</b><br>`;
+    if(summary) out += summary.replace(/\n+/g,' ').trim() + '<br>';
+    if(bullets.length) out += '<ul>'+bullets.map(x=>`<li>${x}</li>`).join('')+'</ul>';
+    if(note) out += `<i>${note}</i><br>`;
+    if(link) out += `[<a href="${link}" target="_blank" rel="noreferrer">Nguồn</a>]`;
+    return out;
   }
-  function compose(p,html){
-    const {title,bullets=[],body='',link,note}=p||{};
-    let out=`**${title||'Kết quả'}**\nTheo dữ liệu em tổng hợp:\n`;
-    if(body) out+=`\n${body}\n`;
-    if(bullets.length) out+='\n'+bullets.map(x=>`- ${x}`).join('\n')+'\n';
-    if(note) out+=`\n> _${note}_\n`;
-    if(link) out+=`\n[Tham khảo](${link})`;
-    return html?out.replace(/\n/g,'<br>'):out;
-  }
-  async function cachedFetch(url, ttlH){
-    const KEY='sapali_cache_v1', now=Date.now(); let s={};
-    try{s=JSON.parse(localStorage.getItem(KEY)||'{}')}catch(e){}
-    if(s[url] && (now-s[url].ts)<(ttlH*3600*1000)) return s[url].data;
-    const r=await fetch(url); let d;
-    try{ d=await r.json(); } catch(e){ d={raw:await r.text()} }
-    s[url]={ts:now,data:d}; localStorage.setItem(KEY,JSON.stringify(s)); return d;
-  }
-  function plan(q){
-    const orig=String(q||''); const s=orig.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
-    const isEcon=/(ty gia|tygia|exchange|usd|vnd|eur|jpy|cpi|gdp|lam phat|lai suat|interest|inflation)/.test(s);
-    const isNews=/(tin|news|ban tin|thi truong|market)/.test(s);
-    const isInternal=/\b(ecn|wi|bom|dept|pu|po|model|ma|sku|tem|spec|linh kien|bo phan)\b/.test(s)||/[A-Z0-9]{2,}[-_][A-Z0-9]{2,}/.test(orig);
-    if(isInternal) return {intent:'internal'}; if(isEcon) return {intent:'economy'};
-    if(isNews) return {intent:'news'}; if(/\d[\s\+\-\*\/\(\)\.]+\d/.test(orig)) return {intent:'math'};
+
+  // ---- Intents
+  function plan(q){const s=vn(q.toLowerCase()); 
+    if(/(thoi tiet|thời tiết|mua|nang|nhiet do)/.test(s)) return {intent:'weather'};
+    if(/(ty gia|exchange|usd|vnd|eur|gdp|cpi|lam phat|lai suat|inflation|interest)/.test(s)) return {intent:'economy'};
+    if(/(tin tuc|tin hôm nay|news|ban tin|thi truong|market)/.test(s)) return {intent:'news'};
+    if(/\d[\s\+\-\*\/\(\)\.]+\d/.test(q)) return {intent:'math'};
+    if(/\b(ecn|wi|bom|dept|po|sku|ma|spec)\b/i.test(q) || /[A-Z0-9]{2,}[-_][A-Z0-9]{2,}/.test(q)) return {intent:'internal'};
     return {intent:'wiki'};
   }
-  async function wiki(q){
-    async function w(lang){return await cachedFetch(`https://${lang}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(q)}`,6)}
-    let d=await w('vi'); if(!d||(!d.extract&&!d.description)) d=await w('en');
-    if(d&&(d.extract||d.description)) return compose({title:d.title||q, body:(d.description?`_${d.description}_\n\n`:'')+(d.extract||''), link:(d.content_urls&&d.content_urls.desktop)?d.content_urls.desktop.page:undefined},true);
-    return 'Chưa tìm thấy mục từ phù hợp trên Wikipedia.';
+
+  // ---- Weather (Open-Meteo)
+  async function weather(q){
+    const m=q.match(/(ha noi|hanoi|tp hcm|ho chi minh|danang|da nang|hue|haiphong|hai phong)/i);
+    const place = m ? m[1] : 'Hanoi';
+    const geo = await cached(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(place)}&count=1&language=vi`,24);
+    const g = (geo && geo.results && geo.results[0]) || {};
+    const lat=g.latitude, lon=g.longitude, name=g.name||place;
+    if(lat==null) return 'Không xác định được địa điểm.';
+    const w = await cached(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true&hourly=temperature_2m,precipitation&timezone=auto`,1);
+    const c=w.current_weather||{};
+    return compose({
+      title:`Thời tiết ${name} (hiện tại)`,
+      summary:`Nhiệt độ khoảng ${Math.round(c.temperature)}°C, gió ${c.windspeed||'-'} km/h.`,
+      bullets:[`Thời gian: ${c.time||'-'}`, `Mã thời tiết: ${c.weathercode??'-'}`],
+      note:'Nguồn: Open-Meteo'
+    });
   }
+
+  // ---- Economy: FX + WorldBank
   async function fx(q){
     const m=q.toUpperCase().match(/\b([A-Z]{3})[\/\s\-]*([A-Z]{3})\b/);
     const base=(m&&m[1])||'USD', sym=(m&&m[2])||'VND';
-    const d=await cachedFetch(`https://api.exchangerate.host/latest?base=${base}&symbols=${sym}`,1);
-    if(!d||!d.rates||!d.rates[sym]) return 'Chưa lấy được tỷ giá.';
-    return compose({title:`Tỷ giá ${base}/${sym}`, bullets:[`Hiện tại: **${Number(d.rates[sym]).toLocaleString()}**`,`Nguồn: exchangerate.host`] }, true);
+    const d=await cached(`https://api.exchangerate.host/latest?base=${base}&symbols=${sym}`,1);
+    const rate=d?.rates?.[sym]; if(!rate) return 'Chưa lấy được tỷ giá.';
+    return compose({title:`Tỷ giá ${base}/${sym}`, summary:`Hiện tại khoảng ${rate.toLocaleString()}.`, note:'Nguồn: exchangerate.host'});
   }
   async function wb(q){
-    const map={gdp:'NY.GDP.MKTP.CD',inflation:'FP.CPI.TOTL.ZG',cpi:'FP.CPI.TOTL.ZG',interest:'FR.INR.LEND'};
-    let ind='NY.GDP.MKTP.CD', cc='VNM';
-    if(/inflation|l[ạa]m ph[aá]t|cpi/i.test(q)) ind=map.inflation;
-    if(/interest|l[ãa]i su[aá]t/i.test(q)) ind=map.interest;
-    const c=(q.toLowerCase().match(/\b(vietnam|viet nam|japan|jpn|usa|us|china|cn|singapore|sg)\b/)||[])[1];
-    if(c){ cc=/jap|jpn|japan/.test(c)?'JPN':/usa|us/.test(c)?'USA':/china|cn/.test(c)?'CHN':/singapore|sg/.test(c)?'SGP':'VNM'; }
-    const d=await cachedFetch(`https://api.worldbank.org/v2/country/${cc}/indicator/${ind}?format=json&per_page=5`,24);
-    const arr=(d&&d[1])||[]; const rows=arr.filter(x=>x.value!=null).slice(0,3).map(x=>`**${x.date}**: ${Number(x.value).toLocaleString()}`);
-    return compose({title:`World Bank — ${ind} (${cc})`, bullets: rows.length?rows:['Chưa có số liệu hợp lệ']},true);
+    const map={gdp:'NY.GDP.MKTP.CD',infl:'FP.CPI.TOTL.ZG',int:'FR.INR.LEND'};
+    const ind=/inflation|l[ạa]m ph[aá]t|cpi/i.test(q)?map.infl:/interest|l[ãa]i su[aá]t/i.test(q)?map.int:map.gdp;
+    let cc='VNM'; const c=(q.toLowerCase().match(/\b(vietnam|viet nam|japan|usa|us|china|singapore)\b/)||[])[1];
+    if(c){ cc=/jap/.test(c)?'JPN':/usa|us/.test(c)?'USA':/china/.test(c)?'CHN':/singapore/.test(c)?'SGP':'VNM'; }
+    const d=await cached(`https://api.worldbank.org/v2/country/${cc}/indicator/${ind}?format=json&per_page=5`,24);
+    const arr=(d&&d[1])||[]; const rows=arr.filter(x=>x.value!=null).slice(0,3).map(x=>`${x.date}: ${Number(x.value).toLocaleString()}`);
+    return compose({title:`World Bank — ${ind} (${cc})`, bullets: rows.length?rows:['Chưa có số liệu hợp lệ'], note:'Nguồn: World Bank'});
   }
+
+  // ---- News (fix parser)
   async function news(q){
-    const kw=encodeURIComponent(q.replace(/\b(tin|news|bản tin|thị trường)\b/gi,'').trim()||'kinh tế');
-    const raw=await cachedFetch(`https://r.jina.ai/http://news.google.com/rss/search?q=${kw}`,1);
-    const xml=raw.raw||''; const items=[...xml.matchAll(/<item>([\s\S]*?)<\/item>/g)].slice(0,5).map(m=>{
-      const t=(m[1].match(/<title><!\[CDATA\[(.*?)\]\]><\/title>/)||[])[1]||(m[1].match(/<title>(.*?)<\/title>/)||[])[1]||'';
-      const l=(m[1].match(/<link>(.*?)<\/link>/)||[])[1]||''; return `• ${t}\n  ${l}`; });
-    return compose({title:`Bản tin nhanh`, bullets:items.length?items:['Không đọc được RSS.'], note:'Nguồn: Google News RSS'},true);
+    const kw=encodeURIComponent(q.replace(/(tin tuc|tin|news|bản tin)/ig,'').trim()||'kinh tế');
+    const raw=await cached(`https://r.jina.ai/http://news.google.com/rss/search?q=${kw}&hl=vi&gl=VN&ceid=VN:vi`,1);
+    const xml=raw.raw||'';
+    const items=[...xml.matchAll(/<item>([\s\S]*?)<\/item>/g)].slice(0,5).map(m=>{
+      const t = (m[1].match(/<title><!\[CDATA\[(.*?)\]\]><\/title>/)||[])[1] || (m[1].match(/<title>(.*?)<\/title>/)||[])[1] || '';
+      const l = (m[1].match(/<link>(.*?)<\/link>/)||[])[1] || '';
+      return {t, l};
+    });
+    const bullets = items.length? items.map(x=>`<a href="${x.l}" target="_blank" rel="noreferrer">${x.t}</a>`): ['Chưa đọc được RSS, thử lại sau.'];
+    return compose({title:'Bản tin nhanh', bullets, note:'Nguồn: Google News RSS'});
   }
-  async function math(q){
-    try{ const expr=q.match(/[-+/*()0-9.\s]+/g)?.join('')||''; const v=Function('"use strict";return('+expr+')')();
-      if(!isFinite(v)) throw 0; return compose({title:'Tính toán',bullets:[`${expr} = **${v}**`]},true);}catch(e){return'Không tính được biểu thức.';}
+
+  // ---- Wiki but nói “giọng người”
+  async function wiki(q){
+    async function w(lang){return await cached(`https://${lang}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(q)}`,6)}
+    let d=await w('vi'); if(!d||(!d.extract&&!d.description)) d=await w('en');
+    if(!(d&& (d.extract||d.description))) return 'Chưa tìm thấy mục từ phù hợp trên Wikipedia.';
+    const desc = (d.description? d.description+'. ': '') + (d.extract||'');
+    const summary = desc.split(/\.\s+/).slice(0,3).join('. ') + '.';
+    return compose({title:d.title||q, summary, bullets:['Tóm tắt rút gọn 2–4 câu','Truy vấn tự nhiên kiểu người'], link:(d.content_urls&&d.content_urls.desktop)?d.content_urls.desktop.page:undefined});
   }
+
+  // ---- Math
+  async function calc(q){ try{
+    const expr=q.match(/[-+/*()0-9.\s]+/g)?.join('')||'';
+    const val=Function('"use strict";return('+expr+')')();
+    if(!isFinite(val)) throw 0;
+    return compose({title:'Tính toán', summary:`${expr} = ${val}`});
+  }catch(e){ return 'Không tính được biểu thức.'; } }
+
+  // ---- Internal (placeholder)
   async function internal(q){
     const KB=JSON.parse(localStorage.getItem('sapali_ai_knowledge')||'[]');
     const hit=KB.find(x=>(x.q||'').toLowerCase().includes(q.toLowerCase()));
-    return hit? compose({title:'Kiến thức nội bộ',bullets:[hit.a],note:'Nguồn: Sapali KB (localStorage)'},true)
-              : 'Em chưa tìm thấy nội bộ phù hợp.';
+    return hit? compose({title:'Kiến thức nội bộ', summary:hit.a, note:'Nguồn: Sapali KB (localStorage)'}):
+                'Em chưa thấy dữ liệu nội bộ phù hợp.';
   }
-  function route(q){
+
+  async function route(q){
     const p=plan(q);
-    if(p.intent==='internal') return internal(q);
-    if(p.intent==='economy')  return (/\b[A-Z]{3}[\/\s\-]*[A-Z]{3}\b/i.test(q)||/t[ỷy]\s*gi[aá]/i.test(q))?fx(q):wb(q);
+    if(p.intent==='weather')  return weather(q);
+    if(p.intent==='economy')  return /\b[A-Z]{3}[\/\s\-]*[A-Z]{3}\b/i.test(q)||/t[ỷy]\s*gi[aá]/i.test(vn(q))? fx(q): wb(q);
     if(p.intent==='news')     return news(q);
-    if(p.intent==='math')     return math(q);
+    if(p.intent==='math')     return calc(q);
+    if(p.intent==='internal') return internal(q);
     return wiki(q);
   }
-  // HARD OVERRIDE: luôn thay thế sendAI cũ
+
+  // ---- HARD override: luôn ghi đè sendAI
   window.sendAI = async function(){
     const input=document.getElementById('aiInput'); const q=(input&&input.value||'').trim(); if(!q) return;
-    bubble('user', q, false); input.value='';
+    bubble('user', q); input.value='';
     const ans = await route(q);
-    bubble('ai', ans, true);
+    bubble('ai', ans);
   };
-  console.log('[Sapali] ai-final-override active');
+  console.log('[Sapali] Router+GPT-like active');
 })();
 </script>
 
