@@ -1,0 +1,16 @@
+streamlit==1.39.0
+fastapi==0.115.5
+uvicorn==0.32.0
+openai==1.51.2
+pandas==2.2.2
+numpy==1.26.4
+sqlalchemy==2.0.36
+google-api-python-client==2.149.0
+google-auth==2.35.0
+google-auth-httplib2==0.2.0
+google-auth-oauthlib==1.2.1
+python-dotenv==1.0.1
+pdfminer.six==20231228
+mammoth==1.8.0
+xlsxwriter==3.2.0
+tiktoken==0.7.0
